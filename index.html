@@ -1735,7 +1735,17 @@ document.getElementById('backHomeBtn').addEventListener('click', () => {
   renderAll();
 });
 
-// ── DRIVE IMPORT — Auto-browse recent docs ──
+// ── DRIVE IMPORT — Auto-browse + Google Picker ──
+let pickerApiLoaded = false;
+function loadPickerApi() {
+  if (pickerApiLoaded) return;
+  const s = document.createElement('script');
+  s.src = 'https://apis.google.com/js/api.js';
+  s.onload = () => gapi.load('picker', () => { pickerApiLoaded = true; });
+  document.head.appendChild(s);
+}
+loadPickerApi();
+
 document.getElementById('importDriveBtn').addEventListener('click', openDriveModal);
 document.getElementById('closeDrive').addEventListener('click', () => modal('driveModal', false));
 
@@ -1760,11 +1770,46 @@ function openDriveModal() {
   });
 
   document.getElementById('driveSearchInput').value = '';
-  document.getElementById('driveFileList').innerHTML = `<div style="padding:20px;text-align:center"><div class="spinner"></div><p style="margin-top:10px;font-size:12px;color:var(--text-muted)">Loading your docs…</p></div>`;
+  document.getElementById('driveFileList').innerHTML = `
+    <div style="padding:16px 0 8px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" id="openPickerBtn" style="flex:1">📂 Browse Google Drive</button>
+    </div>
+    <div style="padding:16px;text-align:center"><div class="spinner"></div><p style="margin-top:10px;font-size:12px;color:var(--text-muted)">Loading recent docs…</p></div>`;
 
   modal('driveModal', true);
-  // Auto-load recent docs immediately on open
+  document.getElementById('openPickerBtn').addEventListener('click', openGooglePicker);
   loadRecentDocs();
+}
+
+function openGooglePicker() {
+  if (!state.accessToken) return toast('Sign in first!', '⚠️');
+  if (!pickerApiLoaded) return toast('Picker still loading, try again in a sec!', '⏳');
+  const picker = new google.picker.PickerBuilder()
+    .addView(new google.picker.DocsView(google.picker.ViewId.DOCS)
+      .setMimeTypes('application/vnd.google-apps.document')
+      .setMode(google.picker.DocsViewMode.LIST))
+    .addView(new google.picker.DocsView(google.picker.ViewId.RECENTLY_PICKED)
+      .setMimeTypes('application/vnd.google-apps.document'))
+    .setOAuthToken(state.accessToken)
+    .setDeveloperKey('AIzaSyDZSzG6Y2B9052aFTr6wrGU5xJDRNRwAtw')
+    .setCallback(pickerCallback)
+    .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+    .setTitle('Select Google Docs to import')
+    .build();
+  picker.setVisible(true);
+}
+
+function pickerCallback(data) {
+  if (data.action !== google.picker.Action.PICKED) return;
+  (data.docs || []).forEach(f => {
+    if (!state.selectedDriveFiles.find(s => s.id === f.id)) {
+      state.selectedDriveFiles.push({ id: f.id, name: f.name, webViewLink: f.url });
+    }
+    if (!state.driveFiles.find(d => d.id === f.id)) {
+      state.driveFiles.push({ id: f.id, name: f.name, modifiedTime: null, webViewLink: f.url });
+    }
+  });
+  renderDriveFiles();
 }
 
 async function loadRecentDocs() {
@@ -1796,17 +1841,13 @@ document.querySelectorAll('#importTypeChips .chip').forEach(chip => {
   });
 });
 
-// Search filters the already-loaded list instantly, no extra API call
+// Search filters instantly
 let driveSearchTimer;
 document.getElementById('driveSearchInput').addEventListener('input', (e) => {
   clearTimeout(driveSearchTimer);
   const q = e.target.value.trim().toLowerCase();
-  if (!q) {
-    renderDriveFiles();
-    return;
-  }
-  const filtered = state.driveFiles.filter(f => f.name.toLowerCase().includes(q));
-  renderDriveFiles(filtered);
+  if (!q) { renderDriveFiles(); return; }
+  renderDriveFiles(state.driveFiles.filter(f => f.name.toLowerCase().includes(q)));
 });
 
 async function searchDrive(query) {
