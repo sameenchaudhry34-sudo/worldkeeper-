@@ -1,0 +1,1741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WorldKeeper</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet"/>
+  <script src="https://accounts.google.com/gsi/client"></script>
+  <style>
+    :root {
+      --bg: #080709;
+      --surface: #100e13;
+      --surface2: #18141e;
+      --surface3: #211b2a;
+      --border: rgba(255,255,255,0.06);
+      --border2: rgba(255,255,255,0.11);
+      --accent: #c084fc;
+      --accent2: #e879f9;
+      --accent-dim: rgba(192,132,252,0.12);
+      --accent-glow: rgba(192,132,252,0.25);
+      --text: #f0eaf8;
+      --text-muted: #9180a8;
+      --text-faint: #4a3f5c;
+      --red: #f87171;
+      --green: #6ee7b7;
+      --gold: #fbbf24;
+      --r: 12px;
+      --r-sm: 7px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      overflow: hidden;
+    }
+
+    /* ── NOISE TEXTURE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.4;
+    }
+
+    /* ── AMBIENT GLOW ── */
+    .ambient {
+      position: fixed;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(192,132,252,0.06) 0%, transparent 70%);
+      top: -200px;
+      left: -100px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .ambient-2 {
+      position: fixed;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(232,121,249,0.04) 0%, transparent 70%);
+      bottom: -100px;
+      right: -100px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── APP LAYOUT ── */
+    #app {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      grid-template-rows: 56px 1fr;
+      height: 100vh;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,7,9,0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-mark {
+      width: 30px;
+      height: 30px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .logo-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text);
+    }
+
+    .logo-text em {
+      color: var(--accent);
+      font-style: italic;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .search-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      width: 220px;
+      transition: border-color 0.2s;
+    }
+
+    .search-bar:focus-within {
+      border-color: var(--accent);
+    }
+
+    .search-bar input {
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      width: 100%;
+    }
+
+    .search-bar input::placeholder { color: var(--text-faint); }
+    .search-bar .search-icon { color: var(--text-faint); font-size: 12px; }
+
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 10px 5px 5px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .user-pill:hover { border-color: var(--border2); }
+
+    .user-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      overflow: hidden;
+    }
+
+    .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .user-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .sign-out-btn {
+      font-size: 11px;
+      color: var(--text-faint);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      transition: color 0.2s;
+    }
+
+    .sign-out-btn:hover { color: var(--red); }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--surface3) transparent;
+      padding: 16px 0;
+    }
+
+    .sidebar::-webkit-scrollbar { width: 3px; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+
+    .sidebar-section {
+      margin-bottom: 6px;
+    }
+
+    .sidebar-label {
+      padding: 6px 18px;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+
+    .world-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 18px;
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+      border-left: 2px solid transparent;
+    }
+
+    .world-nav-item:hover {
+      background: var(--surface2);
+    }
+
+    .world-nav-item.active {
+      background: var(--accent-dim);
+      border-left-color: var(--accent);
+    }
+
+    .world-nav-emoji { font-size: 16px; flex-shrink: 0; }
+
+    .world-nav-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .world-nav-count {
+      font-size: 10px;
+      color: var(--text-faint);
+      background: var(--surface3);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+
+    .add-world-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 18px;
+      cursor: pointer;
+      color: var(--text-faint);
+      font-size: 13px;
+      transition: color 0.15s;
+      width: 100%;
+      background: none;
+      border: none;
+      font-family: 'DM Sans', sans-serif;
+      text-align: left;
+    }
+
+    .add-world-btn:hover { color: var(--accent); }
+
+    /* ── MAIN CONTENT ── */
+    .main {
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--surface3) transparent;
+      padding: 28px 32px;
+    }
+
+    .main::-webkit-scrollbar { width: 4px; }
+    .main::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+
+    /* ── VIEWS ── */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── LOGIN VIEW ── */
+    #loginView {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      grid-column: 1 / -1;
+    }
+
+    .login-card {
+      text-align: center;
+      max-width: 400px;
+      padding: 48px 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.4);
+    }
+
+    .login-mark {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 20px;
+      box-shadow: 0 0 40px var(--accent-glow);
+    }
+
+    .login-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .login-title em { color: var(--accent); font-style: italic; }
+
+    .login-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .google-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 20px;
+      background: #fff;
+      color: #3c4043;
+      border: none;
+      border-radius: var(--r-sm);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: box-shadow 0.2s;
+    }
+
+    .google-btn:hover { box-shadow: 0 4px 20px rgba(255,255,255,0.15); }
+
+    .google-logo {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* ── HOME VIEW ── */
+    .page-header {
+      margin-bottom: 28px;
+    }
+
+    .page-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .page-title em { color: var(--accent); font-style: italic; }
+
+    .page-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 18px;
+    }
+
+    .stat-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* Worlds grid */
+    .section-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-action {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .worlds-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .world-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .world-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--wc, var(--accent)), transparent);
+    }
+
+    .world-card:hover {
+      border-color: var(--wc, var(--accent));
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+
+    .world-card-emoji { font-size: 24px; display: block; margin-bottom: 10px; }
+
+    .world-card-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .world-card-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 10px;
+    }
+
+    .world-card-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .add-world-card {
+      background: transparent;
+      border: 1px dashed var(--surface3);
+      border-radius: var(--r);
+      padding: 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 120px;
+    }
+
+    .add-world-card:hover {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .add-world-card .plus { font-size: 22px; color: var(--text-faint); }
+    .add-world-card p { font-size: 12px; color: var(--text-faint); }
+
+    /* Recent docs */
+    .doc-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .doc-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .doc-item:hover {
+      background: var(--surface2);
+      border-color: var(--border2);
+    }
+
+    .doc-item-icon { font-size: 16px; flex-shrink: 0; }
+    .doc-item-info { flex: 1; min-width: 0; }
+
+    .doc-item-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .doc-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .doc-type-badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .type-scene { background: rgba(192,132,252,0.15); color: var(--accent); }
+    .type-lore { background: rgba(251,191,36,0.12); color: var(--gold); }
+    .type-ref { background: rgba(110,231,183,0.12); color: var(--green); }
+    .type-oneshot { background: rgba(248,113,113,0.12); color: var(--red); }
+    .type-other { background: var(--surface3); color: var(--text-muted); }
+
+    .doc-item-actions {
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .doc-item:hover .doc-item-actions { opacity: 1; }
+
+    .mini-btn {
+      width: 24px;
+      height: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      transition: all 0.15s;
+    }
+
+    .mini-btn:hover { color: var(--text); border-color: var(--accent); }
+    .mini-btn.del:hover { color: var(--red); border-color: var(--red); }
+
+    /* ── WORLD DETAIL VIEW ── */
+    .world-detail-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      gap: 16px;
+    }
+
+    .world-detail-left { display: flex; align-items: center; gap: 14px; }
+
+    .world-detail-emoji {
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .world-detail-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 32px;
+      font-weight: 600;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .world-detail-sub { font-size: 13px; color: var(--text-muted); }
+
+    .world-detail-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    /* Tabs */
+    .tabs-row {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .tabs-row::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.15s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Drive import section */
+    .drive-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .drive-section-text { flex: 1; }
+    .drive-section-title { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+    .drive-section-sub { font-size: 11px; color: var(--text-muted); }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: var(--r-sm);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: none;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+    }
+
+    .btn-primary:hover { opacity: 0.85; }
+
+    .btn-ghost {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Empty state */
+    .empty-state {
+      padding: 48px 20px;
+      text-align: center;
+      color: var(--text-faint);
+    }
+
+    .empty-icon { font-size: 36px; margin-bottom: 12px; }
+    .empty-title { font-size: 14px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+    .empty-sub { font-size: 12px; line-height: 1.6; }
+
+    /* ── DRIVE PICKER MODAL ── */
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(8,7,9,0.85);
+      backdrop-filter: blur(8px);
+      z-index: 500;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .modal-bg.open { display: flex; }
+
+    .modal-sheet {
+      width: 100%;
+      max-width: 560px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-bottom: none;
+      border-radius: 20px 20px 0 0;
+      padding: 24px;
+      animation: slideUp 0.25s ease;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      transition: color 0.15s;
+    }
+
+    .modal-close:hover { color: var(--text); }
+
+    .form-group { margin-bottom: 14px; }
+
+    .form-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 7px;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus, .form-select:focus { border-color: var(--accent); }
+    .form-select option { background: var(--surface2); }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+    .chip.sel { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+    .color-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .swatch.sel { border-color: #fff; transform: scale(1.2); }
+
+    .drive-file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--surface3) transparent;
+    }
+
+    .drive-file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .drive-file-item:hover, .drive-file-item.sel {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .drive-file-item .check {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+
+    .drive-file-item.sel .check {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .drive-file-name {
+      font-size: 13px;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .drive-file-date { font-size: 11px; color: var(--text-faint); flex-shrink: 0; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--r-sm);
+      padding: 10px 18px;
+      font-size: 13px;
+      color: var(--text);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      transition: all 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Search results overlay */
+    .search-results {
+      position: fixed;
+      top: 56px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 500px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-top: none;
+      border-radius: 0 0 var(--r) var(--r);
+      z-index: 400;
+      display: none;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .search-results.open { display: block; }
+
+    .search-result-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 16px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .search-result-item:hover { background: var(--surface2); }
+    .search-result-item:last-child { border-bottom: none; }
+
+    /* Spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--surface3);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar for drive file list */
+    .drive-file-list::-webkit-scrollbar { width: 3px; }
+    .drive-file-list::-webkit-scrollbar-thumb { background: var(--surface3); }
+
+    /* full-page login overlay when not authenticated */
+    #loginOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 800;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #loginOverlay.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="ambient"></div>
+<div class="ambient-2"></div>
+
+<!-- LOGIN OVERLAY -->
+<div id="loginOverlay">
+  <div class="login-card">
+    <div class="login-mark">📖</div>
+    <div class="login-title">World<em>Keeper</em></div>
+    <p class="login-sub">Your fiction worlds, couples, and lore — organised beautifully. Sign in with Google to connect your Docs.</p>
+    <button class="google-btn" id="signInBtn">
+      <svg class="google-logo" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Continue with Google
+    </button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-mark">📖</div>
+      <div class="logo-text">World<em>Keeper</em></div>
+    </div>
+    <div class="topbar-right">
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search docs, worlds, couples…"/>
+      </div>
+      <div class="user-pill" id="userPill">
+        <div class="user-avatar" id="userAvatar"></div>
+        <span class="user-name" id="userName"></span>
+        <button class="sign-out-btn" id="signOutBtn">sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- SEARCH RESULTS -->
+  <div class="search-results" id="searchResults"></div>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Worlds</div>
+      <div id="sidebarWorlds"></div>
+      <button class="add-world-btn" id="sidebarAddWorld">＋ &nbsp;New World</button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main" id="mainContent">
+
+    <!-- HOME VIEW -->
+    <div class="view active" id="homeView">
+      <div class="page-header">
+        <div class="page-title">Your <em>Worlds</em></div>
+        <div class="page-sub" id="homeSubtext">Loading your library…</div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-num" id="statWorlds">0</div>
+          <div class="stat-label">Worlds</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statCouples">0</div>
+          <div class="stat-label">Couples</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statDocs">0</div>
+          <div class="stat-label">Tagged Docs</div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        All Worlds
+        <button class="section-action" id="homeAddWorld">＋ New World</button>
+      </div>
+      <div class="worlds-grid" id="homeWorldsGrid"></div>
+
+      <div class="section-title">Recently Tagged</div>
+      <div class="doc-list" id="recentDocs"></div>
+    </div>
+
+    <!-- WORLD VIEW -->
+    <div class="view" id="worldView">
+      <div class="world-detail-header">
+        <div class="world-detail-left">
+          <div class="world-detail-emoji" id="wdEmoji"></div>
+          <div>
+            <div class="world-detail-name" id="wdName"></div>
+            <div class="world-detail-sub" id="wdSub"></div>
+          </div>
+        </div>
+        <div class="world-detail-actions">
+          <button class="btn btn-ghost" id="importDriveBtn">📂 Import from Drive</button>
+          <button class="btn btn-ghost" id="addCoupleBtn">＋ Couple</button>
+          <button class="btn btn-ghost" id="backHomeBtn">← Back</button>
+        </div>
+      </div>
+
+      <div class="tabs-row" id="worldTabs"></div>
+      <div class="doc-list" id="worldDocList"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── ADD WORLD MODAL ── -->
+<div class="modal-bg" id="addWorldModal">
+  <div class="modal-sheet">
+    <div class="modal-title">
+      New World
+      <button class="modal-close" id="closeAddWorld">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">World Name</label>
+      <input class="form-input" id="newWorldName" placeholder="e.g. Crimson Lies"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Emoji</label>
+      <input class="form-input" id="newWorldEmoji" placeholder="🌍" maxlength="2" style="width:80px"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Colour</label>
+      <div class="color-row" id="worldColorRow"></div>
+    </div>
+    <button class="btn btn-primary" id="saveWorldBtn" style="width:100%;margin-top:4px">Create World ✓</button>
+  </div>
+</div>
+
+<!-- ── ADD COUPLE MODAL ── -->
+<div class="modal-bg" id="addCoupleModal">
+  <div class="modal-sheet">
+    <div class="modal-title">
+      Add Couple
+      <button class="modal-close" id="closeAddCouple">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ship Name / Couple Name</label>
+      <input class="form-input" id="newCoupleName" placeholder="e.g. Selena & Lucian"/>
+    </div>
+    <button class="btn btn-primary" id="saveCoupleBtn" style="width:100%;margin-top:4px">Add Couple ✓</button>
+  </div>
+</div>
+
+<!-- ── IMPORT FROM DRIVE MODAL ── -->
+<div class="modal-bg" id="driveModal">
+  <div class="modal-sheet">
+    <div class="modal-title">
+      Import from Drive
+      <button class="modal-close" id="closeDrive">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Section</label>
+      <select class="form-select" id="importSection"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Doc Type</label>
+      <div class="chip-row" id="importTypeChips">
+        <div class="chip sel" data-type="scene">Scene</div>
+        <div class="chip" data-type="lore">Lore</div>
+        <div class="chip" data-type="ref">Reference</div>
+        <div class="chip" data-type="oneshot">One-shot</div>
+        <div class="chip" data-type="other">Other</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Search your Drive</label>
+      <input class="form-input" id="driveSearchInput" placeholder="Search Google Docs by name…"/>
+    </div>
+    <div class="drive-file-list" id="driveFileList">
+      <div class="empty-state">
+        <div class="empty-icon">📂</div>
+        <p class="empty-sub">Type above to search your Google Docs</p>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="importSelectedBtn" style="width:100%">Import Selected ✓</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  WORLDKEEPER — FULL APP
+// ═══════════════════════════════════════════════════════
+
+const CLIENT_ID = '134428732256-phoprq784nm6e458fben5hfts2vt46ve.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly';
+const COLORS = ['#c084fc','#e879f9','#f87171','#fb923c','#fbbf24','#6ee7b7','#38bdf8','#a78bfa','#f472b6','#34d399'];
+
+// ── STATE ──
+let state = {
+  worlds: [],
+  activeWorldId: null,
+  activeTab: 'lore',
+  user: null,
+  accessToken: null,
+  selectedColor: COLORS[0],
+  importDocType: 'scene',
+  selectedDriveFiles: [],
+  driveFiles: [],
+};
+
+// ── STORAGE ──
+function save() {
+  localStorage.setItem('wk_worlds', JSON.stringify(state.worlds));
+}
+
+function load() {
+  const w = localStorage.getItem('wk_worlds');
+  if (w) state.worlds = JSON.parse(w);
+  const u = localStorage.getItem('wk_user');
+  if (u) state.user = JSON.parse(u);
+  const t = localStorage.getItem('wk_token');
+  if (t) state.accessToken = t;
+}
+
+// ── UTILS ──
+function id() { return Math.random().toString(36).slice(2, 9); }
+
+function toast(msg, icon = '✓') {
+  const el = document.getElementById('toast');
+  el.textContent = icon + '  ' + msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function typeClass(t) {
+  return { scene:'type-scene', lore:'type-lore', ref:'type-ref', oneshot:'type-oneshot', other:'type-other' }[t] || 'type-other';
+}
+
+function typeLabel(t) {
+  return { scene:'Scene', lore:'Lore', ref:'Ref', oneshot:'One-shot', other:'Other' }[t] || t;
+}
+
+function showView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.getElementById(v + 'View').classList.add('active');
+}
+
+function modal(id, open) {
+  document.getElementById(id).classList.toggle('open', open);
+}
+
+// ── AUTH ──
+function doSignIn() {
+  if (typeof google === 'undefined' || !google.accounts) {
+    toast('Google still loading, try again in a moment!', '⏳');
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (res) => {
+      if (res.access_token) {
+        state.accessToken = res.access_token;
+        localStorage.setItem('wk_token', res.access_token);
+        fetchUserInfo(res.access_token);
+      }
+    }
+  });
+  client.requestAccessToken();
+}
+
+document.getElementById('signInBtn').addEventListener('click', doSignIn);
+
+async function fetchUserInfo(token) {
+  const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  const user = await res.json();
+  state.user = user;
+  localStorage.setItem('wk_user', JSON.stringify(user));
+  initApp();
+}
+
+function initApp() {
+  if (!state.user) return;
+
+  document.getElementById('loginOverlay').classList.add('hidden');
+
+  const av = document.getElementById('userAvatar');
+  if (state.user.picture) {
+    av.innerHTML = `<img src="${state.user.picture}" alt="avatar"/>`;
+  } else {
+    av.textContent = (state.user.name || 'U')[0].toUpperCase();
+  }
+  document.getElementById('userName').textContent = state.user.given_name || state.user.name || '';
+
+  renderAll();
+}
+
+document.getElementById('signOutBtn').addEventListener('click', () => {
+  localStorage.removeItem('wk_token');
+  localStorage.removeItem('wk_user');
+  location.reload();
+});
+
+// ── RENDER ──
+function renderAll() {
+  renderSidebar();
+  renderHome();
+  updateStats();
+}
+
+function updateStats() {
+  const totalCouples = state.worlds.reduce((a, w) => a + (w.couples||[]).length, 0);
+  const totalDocs = state.worlds.reduce((a, w) => a + (w.docs||[]).length, 0);
+  document.getElementById('statWorlds').textContent = state.worlds.length;
+  document.getElementById('statCouples').textContent = totalCouples;
+  document.getElementById('statDocs').textContent = totalDocs;
+
+  const sub = document.getElementById('homeSubtext');
+  sub.textContent = state.worlds.length === 0
+    ? 'Create your first world to get started ✨'
+    : `${state.worlds.length} world${state.worlds.length !== 1 ? 's' : ''} · ${totalDocs} tagged doc${totalDocs !== 1 ? 's' : ''}`;
+}
+
+function renderSidebar() {
+  const el = document.getElementById('sidebarWorlds');
+  el.innerHTML = '';
+  state.worlds.forEach(w => {
+    const item = document.createElement('div');
+    item.className = 'world-nav-item' + (state.activeWorldId === w.id ? ' active' : '');
+    item.innerHTML = `
+      <span class="world-nav-emoji">${w.emoji || '🌍'}</span>
+      <span class="world-nav-name">${w.name}</span>
+      <span class="world-nav-count">${(w.docs||[]).length}</span>
+    `;
+    item.addEventListener('click', () => openWorld(w.id));
+    el.appendChild(item);
+  });
+}
+
+function renderHome() {
+  const grid = document.getElementById('homeWorldsGrid');
+  grid.innerHTML = '';
+
+  state.worlds.forEach(w => {
+    const card = document.createElement('div');
+    card.className = 'world-card';
+    card.style.setProperty('--wc', w.color || COLORS[0]);
+    card.innerHTML = `
+      <span class="world-card-emoji">${w.emoji || '🌍'}</span>
+      <div class="world-card-name">${w.name}</div>
+      <div class="world-card-meta">
+        <span>📄 ${(w.docs||[]).length} docs</span>
+        <span>💑 ${(w.couples||[]).length} couples</span>
+      </div>
+    `;
+    card.addEventListener('click', () => openWorld(w.id));
+    grid.appendChild(card);
+  });
+
+  // Add card
+  const add = document.createElement('div');
+  add.className = 'add-world-card';
+  add.innerHTML = `<div class="plus">＋</div><p>New World</p>`;
+  add.addEventListener('click', openAddWorldModal);
+  grid.appendChild(add);
+
+  // Recent docs
+  const recentEl = document.getElementById('recentDocs');
+  recentEl.innerHTML = '';
+  const allDocs = [];
+  state.worlds.forEach(w => {
+    (w.docs || []).forEach(d => allDocs.push({ ...d, worldName: w.name, worldEmoji: w.emoji }));
+  });
+  const recent = allDocs.slice(-8).reverse();
+  if (recent.length === 0) {
+    recentEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p class="empty-title">No docs yet</p><p class="empty-sub">Open a world and import docs from your Drive</p></div>`;
+  } else {
+    recent.forEach(d => recentEl.appendChild(buildDocItem(d)));
+  }
+}
+
+function buildDocItem(doc, worldName, worldEmoji) {
+  const wn = doc.worldName || worldName || '';
+  const we = doc.worldEmoji || worldEmoji || '';
+  const item = document.createElement('div');
+  item.className = 'doc-item';
+  item.innerHTML = `
+    <div class="doc-item-icon">📝</div>
+    <div class="doc-item-info">
+      <div class="doc-item-name">${doc.title}</div>
+      <div class="doc-item-meta">${we} ${wn}${doc.addedAt ? ' · ' + doc.addedAt : ''}</div>
+    </div>
+    <div class="doc-type-badge ${typeClass(doc.type)}">${typeLabel(doc.type)}</div>
+    <div class="doc-item-actions">
+      <button class="mini-btn open-btn" title="Open in Docs">↗</button>
+      <button class="mini-btn del" title="Remove">✕</button>
+    </div>
+  `;
+  item.querySelector('.open-btn').addEventListener('click', (e) => { e.stopPropagation(); window.open(doc.url, '_blank'); });
+  item.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); removeDoc(doc.id); });
+  item.addEventListener('click', () => window.open(doc.url, '_blank'));
+  return item;
+}
+
+// ── WORLD VIEW ──
+function openWorld(worldId) {
+  const world = state.worlds.find(w => w.id === worldId);
+  if (!world) return;
+  state.activeWorldId = worldId;
+  state.activeTab = 'lore';
+
+  document.getElementById('wdEmoji').textContent = world.emoji || '🌍';
+  document.getElementById('wdName').textContent = world.name;
+  document.getElementById('wdSub').textContent =
+    `${(world.couples||[]).length} couple${(world.couples||[]).length !== 1 ? 's' : ''} · ${(world.docs||[]).length} docs`;
+
+  renderWorldTabs(world);
+  renderWorldDocs(world);
+  showView('world');
+  renderSidebar();
+}
+
+function renderWorldTabs(world) {
+  const tabs = document.getElementById('worldTabs');
+  tabs.innerHTML = '';
+
+  const loreTab = document.createElement('button');
+  loreTab.className = 'tab-btn' + (state.activeTab === 'lore' ? ' active' : '');
+  loreTab.textContent = '📜 World Lore';
+  loreTab.dataset.tab = 'lore';
+  loreTab.addEventListener('click', () => selectTab('lore'));
+  tabs.appendChild(loreTab);
+
+  (world.couples || []).forEach(c => {
+    const t = document.createElement('button');
+    t.className = 'tab-btn' + (state.activeTab === c.id ? ' active' : '');
+    t.textContent = c.name;
+    t.dataset.tab = c.id;
+    t.addEventListener('click', () => selectTab(c.id));
+    tabs.appendChild(t);
+  });
+}
+
+function selectTab(tabId) {
+  state.activeTab = tabId;
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+  renderWorldTabs(world);
+  renderWorldDocs(world);
+}
+
+function renderWorldDocs(world) {
+  const list = document.getElementById('worldDocList');
+  list.innerHTML = '';
+  const docs = (world.docs || []).filter(d =>
+    state.activeTab === 'lore' ? d.section === 'lore' : d.coupleId === state.activeTab
+  );
+  if (docs.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p class="empty-title">No docs here yet</p><p class="empty-sub">Hit "Import from Drive" to add your Google Docs</p></div>`;
+    return;
+  }
+  docs.forEach(d => list.appendChild(buildDocItem(d, world.name, world.emoji)));
+}
+
+function removeDoc(docId) {
+  state.worlds.forEach(w => {
+    w.docs = (w.docs || []).filter(d => d.id !== docId);
+  });
+  save();
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (world) {
+    renderWorldDocs(world);
+    document.getElementById('wdSub').textContent =
+      `${(world.couples||[]).length} couples · ${(world.docs||[]).length} docs`;
+  }
+  renderAll();
+  toast('Doc removed', '🗑️');
+}
+
+// ── WORLD CRUD ──
+function openAddWorldModal() {
+  const row = document.getElementById('worldColorRow');
+  row.innerHTML = '';
+  state.selectedColor = COLORS[0];
+  COLORS.forEach((c, i) => {
+    const s = document.createElement('div');
+    s.className = 'swatch' + (i === 0 ? ' sel' : '');
+    s.style.background = c;
+    s.addEventListener('click', () => {
+      document.querySelectorAll('.swatch').forEach(sw => sw.classList.remove('sel'));
+      s.classList.add('sel');
+      state.selectedColor = c;
+    });
+    row.appendChild(s);
+  });
+  document.getElementById('newWorldName').value = '';
+  document.getElementById('newWorldEmoji').value = '';
+  modal('addWorldModal', true);
+  setTimeout(() => document.getElementById('newWorldName').focus(), 50);
+}
+
+document.getElementById('closeAddWorld').addEventListener('click', () => modal('addWorldModal', false));
+document.getElementById('sidebarAddWorld').addEventListener('click', openAddWorldModal);
+document.getElementById('homeAddWorld').addEventListener('click', openAddWorldModal);
+
+document.getElementById('saveWorldBtn').addEventListener('click', () => {
+  const name = document.getElementById('newWorldName').value.trim();
+  const emoji = document.getElementById('newWorldEmoji').value.trim() || '🌍';
+  if (!name) return toast('Name your world first!', '⚠️');
+  state.worlds.push({ id: id(), name, emoji, color: state.selectedColor, couples: [], docs: [] });
+  save();
+  renderAll();
+  modal('addWorldModal', false);
+  toast(`${emoji} ${name} created!`, '🌍');
+});
+
+document.getElementById('newWorldName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('saveWorldBtn').click();
+});
+
+// ── COUPLE CRUD ──
+document.getElementById('addCoupleBtn').addEventListener('click', () => {
+  document.getElementById('newCoupleName').value = '';
+  modal('addCoupleModal', true);
+  setTimeout(() => document.getElementById('newCoupleName').focus(), 50);
+});
+
+document.getElementById('closeAddCouple').addEventListener('click', () => modal('addCoupleModal', false));
+
+document.getElementById('saveCoupleBtn').addEventListener('click', () => {
+  const name = document.getElementById('newCoupleName').value.trim();
+  if (!name) return toast('Give the couple a name!', '⚠️');
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+  if (!world.couples) world.couples = [];
+  world.couples.push({ id: id(), name });
+  save();
+  openWorld(state.activeWorldId);
+  modal('addCoupleModal', false);
+  toast(`${name} added!`, '💑');
+});
+
+document.getElementById('newCoupleName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('saveCoupleBtn').click();
+});
+
+// ── NAV ──
+document.getElementById('backHomeBtn').addEventListener('click', () => {
+  state.activeWorldId = null;
+  showView('home');
+  renderAll();
+});
+
+// ── DRIVE IMPORT ──
+document.getElementById('importDriveBtn').addEventListener('click', openDriveModal);
+document.getElementById('closeDrive').addEventListener('click', () => modal('driveModal', false));
+
+function openDriveModal() {
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+
+  // populate section select
+  const sel = document.getElementById('importSection');
+  sel.innerHTML = '<option value="lore">📜 World Lore</option>';
+  (world.couples || []).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `💑 ${c.name}`;
+    sel.appendChild(opt);
+  });
+
+  state.selectedDriveFiles = [];
+  state.importDocType = 'scene';
+  document.querySelectorAll('#importTypeChips .chip').forEach(c => {
+    c.classList.toggle('sel', c.dataset.type === 'scene');
+  });
+
+  document.getElementById('driveSearchInput').value = '';
+  document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><div class="empty-icon">📂</div><p class="empty-sub">Type above to search your Google Docs</p></div>`;
+
+  modal('driveModal', true);
+}
+
+// Type chips
+document.querySelectorAll('#importTypeChips .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('#importTypeChips .chip').forEach(c => c.classList.remove('sel'));
+    chip.classList.add('sel');
+    state.importDocType = chip.dataset.type;
+  });
+});
+
+// Drive search
+let driveSearchTimer;
+document.getElementById('driveSearchInput').addEventListener('input', (e) => {
+  clearTimeout(driveSearchTimer);
+  const q = e.target.value.trim();
+  if (!q) {
+    document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><div class="empty-icon">📂</div><p class="empty-sub">Type to search your Google Docs</p></div>`;
+    return;
+  }
+  document.getElementById('driveFileList').innerHTML = `<div style="padding:20px;text-align:center"><div class="spinner"></div></div>`;
+  driveSearchTimer = setTimeout(() => searchDrive(q), 400);
+});
+
+async function searchDrive(query) {
+  if (!state.accessToken) return;
+  try {
+    const q = `name contains '${query.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.document' and trashed=false`;
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,webViewLink)&pageSize=30&orderBy=modifiedTime desc`,
+      { headers: { Authorization: 'Bearer ' + state.accessToken } }
+    );
+    const data = await res.json();
+
+    if (data.error) {
+      // Token expired — re-auth
+      document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><div class="empty-icon">🔐</div><p class="empty-title">Session expired</p><p class="empty-sub">Close this and sign in again</p></div>`;
+      return;
+    }
+
+    state.driveFiles = data.files || [];
+    renderDriveFiles();
+  } catch (err) {
+    document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><p class="empty-sub">Error loading files. Try again.</p></div>`;
+  }
+}
+
+function renderDriveFiles() {
+  const list = document.getElementById('driveFileList');
+  list.innerHTML = '';
+  if (state.driveFiles.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p class="empty-sub">No docs found with that name</p></div>`;
+    return;
+  }
+  state.driveFiles.forEach(f => {
+    const isSel = state.selectedDriveFiles.find(s => s.id === f.id);
+    const item = document.createElement('div');
+    item.className = 'drive-file-item' + (isSel ? ' sel' : '');
+    item.innerHTML = `
+      <div class="check">${isSel ? '✓' : ''}</div>
+      <div class="drive-file-name">${f.name}</div>
+      <div class="drive-file-date">${f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : ''}</div>
+    `;
+    item.addEventListener('click', () => toggleDriveFile(f));
+    list.appendChild(item);
+  });
+}
+
+function toggleDriveFile(file) {
+  const idx = state.selectedDriveFiles.findIndex(f => f.id === file.id);
+  if (idx > -1) {
+    state.selectedDriveFiles.splice(idx, 1);
+  } else {
+    state.selectedDriveFiles.push(file);
+  }
+  renderDriveFiles();
+}
+
+document.getElementById('importSelectedBtn').addEventListener('click', () => {
+  if (state.selectedDriveFiles.length === 0) return toast('Select at least one doc!', '⚠️');
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+
+  const section = document.getElementById('importSection').value;
+  const isLore = section === 'lore';
+
+  let added = 0;
+  state.selectedDriveFiles.forEach(f => {
+    const already = (world.docs || []).find(d => d.url === f.webViewLink);
+    if (already) return;
+    if (!world.docs) world.docs = [];
+    world.docs.push({
+      id: id(),
+      title: f.name,
+      url: f.webViewLink,
+      type: state.importDocType,
+      section: isLore ? 'lore' : 'couple',
+      coupleId: isLore ? null : section,
+      addedAt: new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }),
+    });
+    added++;
+  });
+
+  save();
+  openWorld(state.activeWorldId);
+  modal('driveModal', false);
+  state.selectedDriveFiles = [];
+  toast(`${added} doc${added !== 1 ? 's' : ''} imported!`, '📄');
+  updateStats();
+});
+
+// ── SEARCH ──
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  const resultsEl = document.getElementById('searchResults');
+  if (!q) { resultsEl.classList.remove('open'); return; }
+
+  const matches = [];
+  state.worlds.forEach(w => {
+    (w.docs || []).forEach(d => {
+      if (d.title.toLowerCase().includes(q) || w.name.toLowerCase().includes(q)) {
+        matches.push({ doc: d, world: w });
+      }
+    });
+  });
+
+  resultsEl.innerHTML = '';
+  if (matches.length === 0) {
+    resultsEl.innerHTML = `<div style="padding:16px;text-align:center;font-size:13px;color:var(--text-faint)">No results for "${q}"</div>`;
+  } else {
+    matches.slice(0, 10).forEach(({ doc, world }) => {
+      const item = document.createElement('div');
+      item.className = 'search-result-item';
+      item.innerHTML = `
+        <span style="font-size:14px">📝</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${doc.title}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${world.emoji || ''} ${world.name}</div>
+        </div>
+        <div class="doc-type-badge ${typeClass(doc.type)}">${typeLabel(doc.type)}</div>
+      `;
+      item.addEventListener('click', () => { window.open(doc.url, '_blank'); resultsEl.classList.remove('open'); document.getElementById('searchInput').value = ''; });
+      resultsEl.appendChild(item);
+    });
+  }
+  resultsEl.classList.add('open');
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
+    document.getElementById('searchResults').classList.remove('open');
+  }
+});
+
+// ── INIT ──
+load();
+if (state.user && state.accessToken) {
+  initApp();
+}
+</script>
+</body>
+</html>
