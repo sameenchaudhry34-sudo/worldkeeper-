@@ -996,6 +996,86 @@
     }
 
     #loginOverlay.hidden { display: none; }
+
+    /* ── DOC PREVIEW PANEL ── */
+    .preview-panel {
+      position: fixed;
+      top: 56px;
+      right: 0;
+      width: 520px;
+      height: calc(100vh - 56px);
+      background: var(--surface);
+      border-left: 1px solid var(--border2);
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+      box-shadow: -20px 0 60px rgba(0,0,0,0.4);
+    }
+    .preview-panel.open { transform: translateX(0); }
+
+    .preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      gap: 10px;
+    }
+    .preview-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .preview-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .preview-iframe { flex: 1; border: none; background: #fff; }
+    .preview-loading {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* ── CLAUDE SESSION MODAL ── */
+    .claude-export-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      max-height: 280px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-family: monospace;
+      margin-bottom: 12px;
+    }
+
+    .user-id-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 10px 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: monospace;
+      word-break: break-all;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .user-id-box:hover { border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -1211,6 +1291,45 @@
   </div>
 </div>
 
+<!-- ── DOC PREVIEW PANEL ── -->
+<div class="preview-panel" id="previewPanel">
+  <div class="preview-header">
+    <div class="preview-title" id="previewTitle">Document Preview</div>
+    <div class="preview-actions">
+      <button class="btn btn-ghost" id="previewOpenBtn" style="font-size:11px;padding:5px 10px">↗ Open in Docs</button>
+      <button class="modal-close" id="previewClose">✕</button>
+    </div>
+  </div>
+  <div class="preview-loading" id="previewLoading">
+    <div class="spinner"></div>
+    <span>Loading preview…</span>
+  </div>
+  <iframe class="preview-iframe" id="previewIframe" style="display:none" allowfullscreen></iframe>
+</div>
+
+<!-- ── CLAUDE SESSION MODAL ── -->
+<div class="modal-bg" id="claudeModal">
+  <div class="modal-sheet">
+    <div class="modal-title">
+      🤖 Start Claude Session
+      <button class="modal-close" id="closeClaudeModal">✕</button>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.6">
+      Copy your User ID below — paste it into Claude when using the WorldKeeper connector so Claude knows which worlds to load.
+    </p>
+    <div class="form-label" style="margin-bottom:6px">Your WorldKeeper User ID</div>
+    <div class="user-id-box" id="userIdBox" title="Click to copy">Click to copy your user ID…</div>
+    <div class="form-label" style="margin-bottom:6px">World Context</div>
+    <div class="claude-export-box" id="claudeExportBox">Select a world to generate context…</div>
+    <div class="form-group">
+      <select class="form-select" id="claudeWorldSelect">
+        <option value="">— pick a world —</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="copyClaudeContext" style="width:100%">📋 Copy Context for Claude</button>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -1234,11 +1353,44 @@ let state = {
   importDocType: 'scene',
   selectedDriveFiles: [],
   driveFiles: [],
+  previewDoc: null,
 };
 
-// ── STORAGE ──
-function save() {
+// ── STORAGE — Upstash via /api/data ──
+async function save() {
+  // Always keep localStorage as instant local cache
   localStorage.setItem('wk_worlds', JSON.stringify(state.worlds));
+  // Sync to Upstash in background if user is signed in
+  if (!state.user?.sub) return;
+  try {
+    await fetch('/api/data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': state.user.sub,
+      },
+      body: JSON.stringify({ worlds: state.worlds }),
+    });
+  } catch(e) {
+    console.warn('Upstash sync failed, data saved locally', e);
+  }
+}
+
+async function loadFromCloud() {
+  if (!state.user?.sub) return;
+  try {
+    const res = await fetch('/api/data', {
+      headers: { 'Authorization': state.user.sub }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.worlds && data.worlds.length > 0) {
+      state.worlds = data.worlds;
+      localStorage.setItem('wk_worlds', JSON.stringify(state.worlds));
+    }
+  } catch(e) {
+    console.warn('Cloud load failed, using local data', e);
+  }
 }
 
 function load() {
@@ -1309,7 +1461,7 @@ async function fetchUserInfo(token) {
   initApp();
 }
 
-function initApp() {
+async function initApp() {
   if (!state.user) return;
 
   document.getElementById('loginOverlay').classList.add('hidden');
@@ -1322,6 +1474,8 @@ function initApp() {
   }
   document.getElementById('userName').textContent = state.user.given_name || state.user.name || '';
 
+  // Load from cloud — cloud wins over local cache
+  await loadFromCloud();
   renderAll();
 }
 
@@ -1827,6 +1981,128 @@ document.getElementById('confirmDeleteWorldBtn').addEventListener('click', () =>
   renderAll();
   toast('World deleted', '🗑️');
 });
+
+// ── DOC PREVIEW PANEL ──
+function openPreview(doc) {
+  state.previewDoc = doc;
+  document.getElementById('previewTitle').textContent = doc.title;
+  document.getElementById('previewPanel').classList.add('open');
+
+  const iframe = document.getElementById('previewIframe');
+  const loading = document.getElementById('previewLoading');
+
+  iframe.style.display = 'none';
+  loading.style.display = 'flex';
+
+  // Convert /edit or /view URL to /preview
+  const previewUrl = doc.url
+    .replace(/\/edit.*$/, '/preview')
+    .replace(/\/view.*$/, '/preview');
+
+  iframe.src = previewUrl;
+  iframe.onload = () => {
+    loading.style.display = 'none';
+    iframe.style.display = 'block';
+  };
+
+  document.getElementById('previewOpenBtn').onclick = () => window.open(doc.url, '_blank');
+}
+
+document.getElementById('previewClose').addEventListener('click', () => {
+  document.getElementById('previewPanel').classList.remove('open');
+  document.getElementById('previewIframe').src = '';
+  state.previewDoc = null;
+});
+
+// Update buildDocItem to add preview button
+function buildDocItem(doc, worldName, worldEmoji) {
+  const wn = doc.worldName || worldName || '';
+  const we = doc.worldEmoji || worldEmoji || '';
+  const item = document.createElement('div');
+  item.className = 'doc-item';
+  item.innerHTML = `
+    <div class="doc-item-icon">📝</div>
+    <div class="doc-item-info">
+      <div class="doc-item-name">${doc.title}</div>
+      <div class="doc-item-meta">${we} ${wn}${doc.addedAt ? ' · ' + doc.addedAt : ''}</div>
+    </div>
+    <div class="doc-type-badge ${typeClass(doc.type)}">${typeLabel(doc.type)}</div>
+    <div class="doc-item-actions">
+      <button class="mini-btn preview-btn" title="Preview">👁</button>
+      <button class="mini-btn open-btn" title="Open in Docs">↗</button>
+      <button class="mini-btn del" title="Remove">✕</button>
+    </div>
+  `;
+  item.querySelector('.preview-btn').addEventListener('click', (e) => { e.stopPropagation(); openPreview(doc); });
+  item.querySelector('.open-btn').addEventListener('click', (e) => { e.stopPropagation(); window.open(doc.url, '_blank'); });
+  item.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); removeDoc(doc.id); });
+  item.addEventListener('click', () => openPreview(doc));
+  return item;
+}
+
+// ── CLAUDE SESSION ──
+function openClaudeModal() {
+  // Show user ID
+  const userId = state.user?.sub || state.user?.id || 'Sign in to see your ID';
+  const userIdBox = document.getElementById('userIdBox');
+  userIdBox.textContent = userId;
+  userIdBox.onclick = () => {
+    navigator.clipboard.writeText(userId);
+    toast('User ID copied!', '📋');
+  };
+
+  // Populate world select
+  const sel = document.getElementById('claudeWorldSelect');
+  sel.innerHTML = '<option value="">— pick a world —</option>';
+  state.worlds.forEach(w => {
+    const opt = document.createElement('option');
+    opt.value = w.id;
+    opt.textContent = `${w.emoji || '🌍'} ${w.name}`;
+    sel.appendChild(opt);
+  });
+
+  document.getElementById('claudeExportBox').textContent = 'Select a world above to generate context…';
+  modal('claudeModal', true);
+}
+
+document.getElementById('claudeWorldSelect').addEventListener('change', (e) => {
+  const world = state.worlds.find(w => w.id === e.target.value);
+  if (!world) return;
+
+  const loreDocs = (world.docs || []).filter(d => d.section === 'lore');
+  const lines = [
+    `# ${world.emoji || '🌍'} ${world.name}`,
+    `My WorldKeeper User ID: ${state.user?.sub || state.user?.id || 'unknown'}`,
+    ``,
+    `## World Lore Docs (${loreDocs.length})`,
+    ...loreDocs.map(d => `- ${d.title} [${d.type}] — ${d.url}`),
+    ``
+  ];
+
+  (world.couples || []).forEach(c => {
+    const coupleDocs = (world.docs || []).filter(d => d.coupleId === c.id);
+    lines.push(`## 💑 ${c.name} (${coupleDocs.length} docs)`);
+    coupleDocs.forEach(d => lines.push(`- ${d.title} [${d.type}] — ${d.url}`));
+    lines.push('');
+  });
+
+  document.getElementById('claudeExportBox').textContent = lines.join('\n');
+});
+
+document.getElementById('copyClaudeContext').addEventListener('click', () => {
+  const text = document.getElementById('claudeExportBox').textContent;
+  if (text.includes('Select a world')) return toast('Pick a world first!', '⚠️');
+  navigator.clipboard.writeText(text);
+  toast('Context copied! Paste into Claude 🤖', '📋');
+});
+
+document.getElementById('closeClaudeModal').addEventListener('click', () => modal('claudeModal', false));
+
+// Add Claude session button to topbar
+document.getElementById('userPill').insertAdjacentHTML('beforebegin',
+  `<button class="btn btn-ghost" id="claudeBtn" style="font-size:11px;padding:5px 12px">🤖 Claude Session</button>`
+);
+document.getElementById('claudeBtn').addEventListener('click', openClaudeModal);
 
 // ── INIT ──
 load();
