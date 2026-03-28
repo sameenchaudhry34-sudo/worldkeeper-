@@ -1870,14 +1870,23 @@ async function searchDrive(query) {
   }
 }
 
-function renderDriveFiles() {
+function renderDriveFiles(files) {
+  const filesToShow = files || state.driveFiles;
   const list = document.getElementById('driveFileList');
   list.innerHTML = '';
-  if (state.driveFiles.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p class="empty-sub">No docs found with that name</p></div>`;
+
+  // Always keep Browse button at top
+  const browseBtn = document.createElement('div');
+  browseBtn.style.cssText = 'padding:0 0 10px 0;';
+  browseBtn.innerHTML = `<button class="btn btn-primary" style="width:100%" id="openPickerBtn2">📂 Browse Google Drive (full picker)</button>`;
+  list.appendChild(browseBtn);
+  list.querySelector('#openPickerBtn2').addEventListener('click', openGooglePicker);
+
+  if (filesToShow.length === 0) {
+    list.innerHTML += `<div class="empty-state"><div class="empty-icon">🔍</div><p class="empty-sub">No docs found</p></div>`;
     return;
   }
-  state.driveFiles.forEach(f => {
+  filesToShow.forEach(f => {
     const isSel = state.selectedDriveFiles.find(s => s.id === f.id);
     const item = document.createElement('div');
     item.className = 'drive-file-item' + (isSel ? ' sel' : '');
