@@ -977,6 +977,9 @@
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
+
+    .btn-danger { border-color: rgba(248,113,113,0.3) !important; color: var(--red) !important; }
+    .btn-danger:hover { background: rgba(248,113,113,0.1) !important; border-color: var(--red) !important; }
     /* Scrollbar for drive file list */
     .drive-file-list::-webkit-scrollbar { width: 3px; }
     .drive-file-list::-webkit-scrollbar-thumb { background: var(--surface3); }
@@ -1095,6 +1098,8 @@
         <div class="world-detail-actions">
           <button class="btn btn-ghost" id="importDriveBtn">📂 Import from Drive</button>
           <button class="btn btn-ghost" id="addCoupleBtn">＋ Couple</button>
+          <button class="btn btn-ghost" id="editWorldBtn">✏️ Edit</button>
+          <button class="btn btn-ghost btn-danger" id="deleteWorldBtn">🗑️ Delete</button>
           <button class="btn btn-ghost" id="backHomeBtn">← Back</button>
         </div>
       </div>
@@ -1141,6 +1146,33 @@
       <input class="form-input" id="newCoupleName" placeholder="e.g. Selena & Lucian"/>
     </div>
     <button class="btn btn-primary" id="saveCoupleBtn" style="width:100%;margin-top:4px">Add Couple ✓</button>
+  </div>
+</div>
+
+
+<!-- ── EDIT WORLD MODAL ── -->
+<div class="modal-bg" id="editWorldModal">
+  <div class="modal-sheet">
+    <div class="modal-title">
+      Edit World
+      <button class="modal-close" id="closeEditWorld">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">World Name</label>
+      <input class="form-input" id="editWorldName" placeholder="e.g. Crimson Lies"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Emoji</label>
+      <input class="form-input" id="editWorldEmoji" placeholder="🌍" maxlength="2" style="width:80px"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Colour</label>
+      <div class="color-row" id="editWorldColorRow"></div>
+    </div>
+    <button class="btn btn-primary" id="saveEditWorldBtn" style="width:100%;margin-top:4px">Save Changes ✓</button>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <button class="btn" id="confirmDeleteWorldBtn" style="width:100%;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:var(--red)">Delete this World permanently 🗑️</button>
+    </div>
   </div>
 </div>
 
@@ -1729,6 +1761,71 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.search-bar') && !e.target.closest('.search-results')) {
     document.getElementById('searchResults').classList.remove('open');
   }
+});
+
+
+// ── EDIT WORLD ──
+document.getElementById('editWorldBtn').addEventListener('click', () => {
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+
+  document.getElementById('editWorldName').value = world.name;
+  document.getElementById('editWorldEmoji').value = world.emoji || '';
+
+  const row = document.getElementById('editWorldColorRow');
+  row.innerHTML = '';
+  state._editColor = world.color || COLORS[0];
+  COLORS.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'swatch' + (c === state._editColor ? ' sel' : '');
+    s.style.background = c;
+    s.addEventListener('click', () => {
+      document.querySelectorAll('#editWorldColorRow .swatch').forEach(sw => sw.classList.remove('sel'));
+      s.classList.add('sel');
+      state._editColor = c;
+    });
+    row.appendChild(s);
+  });
+
+  modal('editWorldModal', true);
+  setTimeout(() => document.getElementById('editWorldName').focus(), 50);
+});
+
+document.getElementById('closeEditWorld').addEventListener('click', () => modal('editWorldModal', false));
+
+document.getElementById('saveEditWorldBtn').addEventListener('click', () => {
+  const name = document.getElementById('editWorldName').value.trim();
+  const emoji = document.getElementById('editWorldEmoji').value.trim() || '🌍';
+  if (!name) return toast('World needs a name!', '⚠️');
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+  world.name = name;
+  world.emoji = emoji;
+  world.color = state._editColor;
+  save();
+  modal('editWorldModal', false);
+  openWorld(state.activeWorldId);
+  renderSidebar();
+  toast(`${emoji} ${name} updated!`, '✏️');
+});
+
+document.getElementById('deleteWorldBtn').addEventListener('click', () => {
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+  modal('editWorldModal', true);
+});
+
+document.getElementById('confirmDeleteWorldBtn').addEventListener('click', () => {
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (!world) return;
+  if (!confirm(`Delete "${world.name}" and all its docs? This cannot be undone.`)) return;
+  state.worlds = state.worlds.filter(w => w.id !== state.activeWorldId);
+  state.activeWorldId = null;
+  save();
+  modal('editWorldModal', false);
+  showView('home');
+  renderAll();
+  toast('World deleted', '🗑️');
 });
 
 // ── INIT ──
