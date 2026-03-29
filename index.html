@@ -1319,10 +1319,14 @@
         <div class="chip" data-type="other">Other</div>
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label">Search your Drive</label>
+      <input class="form-input" id="driveSearchInput" placeholder="Search Google Docs by name…"/>
+    </div>
     <div class="drive-file-list" id="driveFileList">
       <div class="empty-state">
         <div class="empty-icon">📂</div>
-        <p class="empty-sub">Click Browse to open Google Drive picker</p>
+        <p class="empty-sub">Loading recent docs…</p>
       </div>
     </div>
     <button class="btn btn-primary" id="importSelectedBtn" style="width:100%">Import Selected ✓</button>
@@ -1797,16 +1801,7 @@ document.getElementById('backHomeBtn').addEventListener('click', () => {
   renderAll();
 });
 
-// ── DRIVE IMPORT — Google Picker only ──
-let pickerApiLoaded = false;
-function loadPickerApi() {
-  if (pickerApiLoaded) return;
-  const s = document.createElement('script');
-  s.src = 'https://apis.google.com/js/api.js';
-  s.onload = () => gapi.load('picker', () => { pickerApiLoaded = true; });
-  document.head.appendChild(s);
-}
-
+// ── DRIVE IMPORT — Search + browse ──
 document.getElementById('importDriveBtn').addEventListener('click', openDriveModal);
 document.getElementById('closeDrive').addEventListener('click', () => modal('driveModal', false));
 
@@ -1830,46 +1825,33 @@ function openDriveModal() {
     c.classList.toggle('sel', c.dataset.type === 'scene');
   });
 
+  document.getElementById('driveSearchInput').value = '';
   document.getElementById('driveFileList').innerHTML = `
-    <div style="padding:16px;text-align:center">
-      <button class="btn btn-primary" id="openPickerBtn" style="width:100%">📂 Browse Google Drive</button>
-      <p style="margin-top:10px;font-size:12px;color:var(--text-muted)">Select docs from the Google picker to import them</p>
-    </div>`;
+    <div style="padding:16px;text-align:center"><div class="spinner"></div><p style="margin-top:10px;font-size:12px;color:var(--text-muted)">Loading recent docs…</p></div>`;
 
   modal('driveModal', true);
-  loadPickerApi();
-  document.getElementById('openPickerBtn').addEventListener('click', openGooglePicker);
+  loadRecentDocs();
 }
 
-function openGooglePicker() {
-  if (!state.accessToken) return toast('Sign in first!', '⚠️');
-  if (!pickerApiLoaded) return toast('Picker still loading, try again in a sec!', '⏳');
-  const picker = new google.picker.PickerBuilder()
-    .addView(new google.picker.DocsView(google.picker.ViewId.DOCS)
-      .setMimeTypes('application/vnd.google-apps.document')
-      .setMode(google.picker.DocsViewMode.LIST))
-    .addView(new google.picker.DocsView(google.picker.ViewId.RECENTLY_PICKED)
-      .setMimeTypes('application/vnd.google-apps.document'))
-    .setOAuthToken(state.accessToken)
-    .setDeveloperKey('AIzaSyDZSzG6Y2B9052aFTr6wrGU5xJDRNRwAtw')
-    .setCallback(pickerCallback)
-    .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
-    .setTitle('Select Google Docs to import')
-    .build();
-  picker.setVisible(true);
-}
 
-function pickerCallback(data) {
-  if (data.action !== google.picker.Action.PICKED) return;
-  (data.docs || []).forEach(f => {
-    if (!state.selectedDriveFiles.find(s => s.id === f.id)) {
-      state.selectedDriveFiles.push({ id: f.id, name: f.name, webViewLink: f.url });
+async function loadRecentDocs() {
+  if (!state.accessToken) return;
+  try {
+    const q = `mimeType='application/vnd.google-apps.document' and trashed=false`;
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,webViewLink)&pageSize=50&orderBy=modifiedTime desc`,
+      { headers: { Authorization: 'Bearer ' + state.accessToken } }
+    );
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><div class="empty-icon">🔐</div><p class="empty-title">Session expired</p><p class="empty-sub">Close and sign in again</p></div>`;
+      return;
     }
-    if (!state.driveFiles.find(d => d.id === f.id)) {
-      state.driveFiles.push({ id: f.id, name: f.name, modifiedTime: null, webViewLink: f.url });
-    }
-  });
-  renderDriveFiles();
+    state.driveFiles = data.files || [];
+    renderDriveFiles();
+  } catch (err) {
+    document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><p class="empty-sub">Error loading files. Try again.</p></div>`;
+  }
 }
 
 // Type chips
@@ -1880,6 +1862,68 @@ document.querySelectorAll('#importTypeChips .chip').forEach(chip => {
     state.importDocType = chip.dataset.type;
   });
 });
+
+// Search filters instantly
+let driveSearchTimer;
+document.getElementById('driveSearchInput').addEventListener('input', (e) => {
+  clearTimeout(driveSearchTimer);
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) { renderDriveFiles(); return; }
+  renderDriveFiles(state.driveFiles.filter(f => f.name.toLowerCase().includes(q)));
+});
+
+async function searchDrive(query) {
+  if (!state.accessToken) return;
+  try {
+    const q = `name contains '${query.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.document' and trashed=false`;
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,webViewLink)&pageSize=30&orderBy=modifiedTime desc`,
+      { headers: { Authorization: 'Bearer ' + state.accessToken } }
+    );
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><div class="empty-icon">🔐</div><p class="empty-title">Session expired</p><p class="empty-sub">Close and sign in again</p></div>`;
+      return;
+    }
+    state.driveFiles = data.files || [];
+    renderDriveFiles();
+  } catch (err) {
+    document.getElementById('driveFileList').innerHTML = `<div class="empty-state"><p class="empty-sub">Error loading files. Try again.</p></div>`;
+  }
+}
+
+function renderDriveFiles(files) {
+  const filesToShow = files || state.driveFiles;
+  const list = document.getElementById('driveFileList');
+  list.innerHTML = '';
+
+  if (filesToShow.length === 0) {
+    list.innerHTML += `<div class="empty-state"><div class="empty-icon">🔍</div><p class="empty-sub">No docs found</p></div>`;
+    return;
+  }
+  filesToShow.forEach(f => {
+    const isSel = state.selectedDriveFiles.find(s => s.id === f.id);
+    const item = document.createElement('div');
+    item.className = 'drive-file-item' + (isSel ? ' sel' : '');
+    item.innerHTML = `
+      <div class="check">${isSel ? '✓' : ''}</div>
+      <div class="drive-file-name">${f.name}</div>
+      <div class="drive-file-date">${f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : ''}</div>
+    `;
+    item.addEventListener('click', () => toggleDriveFile(f));
+    list.appendChild(item);
+  });
+}
+
+function toggleDriveFile(file) {
+  const idx = state.selectedDriveFiles.findIndex(f => f.id === file.id);
+  if (idx > -1) {
+    state.selectedDriveFiles.splice(idx, 1);
+  } else {
+    state.selectedDriveFiles.push(file);
+  }
+  renderDriveFiles();
+}
 
 document.getElementById('importSelectedBtn').addEventListener('click', () => {
   if (state.selectedDriveFiles.length === 0) return toast('Select at least one doc!', '⚠️');
