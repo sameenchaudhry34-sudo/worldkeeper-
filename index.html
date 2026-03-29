@@ -1837,7 +1837,7 @@ function openDriveModal() {
 async function loadRecentDocs() {
   if (!state.accessToken) return;
   try {
-    const q = `mimeType='application/vnd.google-apps.document' and trashed=false`;
+    const q = `(mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document') and trashed=false`;
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,webViewLink)&pageSize=50&orderBy=modifiedTime desc`,
       { headers: { Authorization: 'Bearer ' + state.accessToken } }
@@ -1877,7 +1877,7 @@ async function searchDrive(query) {
   document.getElementById('driveFileList').innerHTML = `
     <div style="padding:16px;text-align:center"><div class="spinner"></div><p style="margin-top:10px;font-size:12px;color:var(--text-muted)">Searching Drive…</p></div>`;
   try {
-    const q = `name contains '${query.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.document' and trashed=false`;
+    const q = `name contains '${query.replace(/'/g, "\\'")}' and (mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document') and trashed=false`;
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,webViewLink)&pageSize=50&orderBy=modifiedTime desc`,
       { headers: { Authorization: 'Bearer ' + state.accessToken } }
