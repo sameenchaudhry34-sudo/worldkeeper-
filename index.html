@@ -651,6 +651,100 @@
     .mini-btn:hover { color: var(--text); border-color: var(--accent); }
     .mini-btn.del:hover { color: var(--red); border-color: var(--red); }
 
+    /* ── VIEW TOGGLE ── */
+    .view-toggle {
+      display: flex;
+      gap: 2px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 2px;
+      flex-shrink: 0;
+      margin-bottom: 4px;
+      align-self: center;
+    }
+    .view-toggle-btn {
+      width: 28px;
+      height: 24px;
+      background: none;
+      border: none;
+      border-radius: 5px;
+      color: var(--text-faint);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      transition: all 0.15s;
+    }
+    .view-toggle-btn.active { background: var(--surface3); color: var(--accent); }
+    .tabs-and-toggle {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tabs-and-toggle .tabs-row {
+      border-bottom: none;
+      margin-bottom: 0;
+      flex: 1;
+    }
+
+    /* ── GALLERY VIEW ── */
+    .doc-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .doc-gallery-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 18px 18px 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 130px;
+    }
+    .doc-gallery-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--card-color, var(--accent)), transparent);
+    }
+    .doc-gallery-card:hover {
+      border-color: var(--card-color, var(--accent));
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+    .doc-gallery-card:hover .doc-gallery-actions { opacity: 1; }
+    .doc-gallery-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.3;
+      flex: 1;
+    }
+    .doc-gallery-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: auto;
+    }
+    .doc-gallery-actions {
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
     /* ── WORLD DETAIL VIEW ── */
     .world-detail-header {
       display: flex;
@@ -1226,8 +1320,14 @@
         </div>
       </div>
 
-      <div class="tabs-row" id="worldTabs"></div>
-      <div class="doc-list" id="worldDocList"></div>
+      <div class="tabs-and-toggle">
+        <div class="tabs-row" id="worldTabs"></div>
+        <div class="view-toggle">
+          <button class="view-toggle-btn active" id="toggleList" title="List view">☰</button>
+          <button class="view-toggle-btn" id="toggleGallery" title="Gallery view">⊞</button>
+        </div>
+      </div>
+      <div id="worldDocList"></div>
     </div>
 
   </main>
@@ -1389,7 +1489,8 @@ const COLORS = ['#c084fc','#e879f9','#f87171','#fb923c','#fbbf24','#6ee7b7','#38
 let state = {
   worlds: [],
   activeWorldId: null,
-  activeTab: 'lore',
+  activeTab: 'all',
+  docView: 'list',
   user: null,
   accessToken: null,
   selectedColor: COLORS[0],
@@ -1707,18 +1808,53 @@ function selectTab(tabId) {
 }
 
 function renderWorldDocs(world) {
-  const list = document.getElementById('worldDocList');
-  list.innerHTML = '';
+  const container = document.getElementById('worldDocList');
+  container.innerHTML = '';
   const docs = (world.docs || []).filter(d =>
     state.activeTab === 'all' ? true :
     state.activeTab === 'lore' ? d.section === 'lore' :
     d.coupleId === state.activeTab
   );
   if (docs.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p class="empty-title">No docs here yet</p><p class="empty-sub">Hit "Import from Drive" to add your Google Docs</p></div>`;
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p class="empty-title">No docs here yet</p><p class="empty-sub">Hit "Import from Drive" to add your Google Docs</p></div>`;
     return;
   }
-  docs.forEach(d => list.appendChild(buildDocItem(d, world.name, world.emoji)));
+  if (state.docView === 'gallery') {
+    const grid = document.createElement('div');
+    grid.className = 'doc-gallery';
+    docs.forEach(d => grid.appendChild(buildDocCard(d, world)));
+    container.appendChild(grid);
+  } else {
+    const list = document.createElement('div');
+    list.className = 'doc-list';
+    docs.forEach(d => list.appendChild(buildDocItem(d, world.name, world.emoji)));
+    container.appendChild(list);
+  }
+}
+
+function buildDocCard(doc, world) {
+  const couple = doc.coupleId ? (world.couples || []).find(c => c.id === doc.coupleId) : null;
+  const color = couple ? (world.color || 'var(--accent)') : 'var(--accent)';
+  const card = document.createElement('div');
+  card.className = 'doc-gallery-card';
+  card.style.setProperty('--card-color', color);
+  card.innerHTML = `
+    <div class="doc-gallery-name">${doc.title}</div>
+    <div class="doc-gallery-footer">
+      <div class="doc-type-badge ${typeClass(doc.type)}">${typeLabel(doc.type)}</div>
+      <div class="doc-gallery-actions">
+        <button class="mini-btn preview-btn" title="Preview">👁</button>
+        <button class="mini-btn open-btn" title="Open in Docs">↗</button>
+        <button class="mini-btn del" title="Remove">✕</button>
+      </div>
+    </div>
+    ${couple ? `<div style="font-size:10px;color:var(--text-faint);margin-top:-4px">💑 ${couple.name}</div>` : `<div style="font-size:10px;color:var(--text-faint);margin-top:-4px">📜 World Lore</div>`}
+  `;
+  card.querySelector('.preview-btn').addEventListener('click', (e) => { e.stopPropagation(); openPreview(doc); });
+  card.querySelector('.open-btn').addEventListener('click', (e) => { e.stopPropagation(); window.open(doc.url, '_blank'); });
+  card.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); removeDoc(doc.id); });
+  card.addEventListener('click', () => openPreview(doc));
+  return card;
 }
 
 function removeDoc(docId) {
@@ -1804,6 +1940,23 @@ document.getElementById('newCoupleName').addEventListener('keydown', e => {
 });
 
 // ── NAV ──
+// ── VIEW TOGGLE ──
+document.getElementById('toggleList').addEventListener('click', () => {
+  state.docView = 'list';
+  document.getElementById('toggleList').classList.add('active');
+  document.getElementById('toggleGallery').classList.remove('active');
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (world) renderWorldDocs(world);
+});
+
+document.getElementById('toggleGallery').addEventListener('click', () => {
+  state.docView = 'gallery';
+  document.getElementById('toggleGallery').classList.add('active');
+  document.getElementById('toggleList').classList.remove('active');
+  const world = state.worlds.find(w => w.id === state.activeWorldId);
+  if (world) renderWorldDocs(world);
+});
+
 document.getElementById('backHomeBtn').addEventListener('click', () => {
   state.activeWorldId = null;
   showView('home');
