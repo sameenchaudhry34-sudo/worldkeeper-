@@ -1442,7 +1442,14 @@ function load() {
   const w = localStorage.getItem('wk_worlds');
   if (w) state.worlds = JSON.parse(w);
   const u = localStorage.getItem('wk_user');
-  if (u) state.user = JSON.parse(u);
+  if (u) {
+    try {
+      const parsed = JSON.parse(u);
+      // Only restore if it's a real user object (has id field, not an error)
+      if (parsed && parsed.id) state.user = parsed;
+      else localStorage.removeItem('wk_user');
+    } catch(e) { localStorage.removeItem('wk_user'); }
+  }
   const t = localStorage.getItem('wk_token');
   if (t) state.accessToken = t;
 }
@@ -1497,13 +1504,27 @@ function doSignIn() {
 document.getElementById('signInBtn').addEventListener('click', doSignIn);
 
 async function fetchUserInfo(token) {
-  const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-    headers: { Authorization: 'Bearer ' + token }
-  });
-  const user = await res.json();
-  state.user = user;
-  localStorage.setItem('wk_user', JSON.stringify(user));
-  initApp();
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const user = await res.json();
+    if (user && user.id) {
+      state.user = user;
+      localStorage.setItem('wk_user', JSON.stringify(user));
+      initApp();
+    } else {
+      localStorage.removeItem('wk_user');
+      localStorage.removeItem('wk_token');
+      state.user = null;
+      state.accessToken = null;
+    }
+  } catch(e) {
+    localStorage.removeItem('wk_user');
+    localStorage.removeItem('wk_token');
+    state.user = null;
+    state.accessToken = null;
+  }
 }
 
 async function initApp() {
@@ -2226,6 +2247,7 @@ function buildDocItem(doc, worldName, worldEmoji) {
 // ── CLAUDE SESSION ──
 function openClaudeModal() {
   // Show user ID
+  console.log('🔍 state.user:', JSON.stringify(state.user));
   const userId = state.user?.id || state.user?.sub || state.user?.email || 'Sign in to see your ID';
   const userIdBox = document.getElementById('userIdBox');
   userIdBox.textContent = userId;
