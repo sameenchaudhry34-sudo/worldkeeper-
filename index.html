@@ -1404,13 +1404,14 @@ async function save() {
   // Always keep localStorage as instant local cache
   localStorage.setItem('wk_worlds', JSON.stringify(state.worlds));
   // Sync to Upstash in background if user is signed in
-  if (!state.user?.sub) return;
+  if (!state.user?.id && !state.user?.sub) return;
+  const userId = state.user.id || state.user.sub;
   try {
     await fetch('/api/data', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': state.user.sub,
+        'Authorization': userId,
       },
       body: JSON.stringify({ worlds: state.worlds }),
     });
@@ -1420,10 +1421,11 @@ async function save() {
 }
 
 async function loadFromCloud() {
-  if (!state.user?.sub) return;
+  if (!state.user?.id && !state.user?.sub) return;
+  const userId = state.user.id || state.user.sub;
   try {
     const res = await fetch('/api/data', {
-      headers: { 'Authorization': state.user.sub }
+      headers: { 'Authorization': userId }
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -2224,7 +2226,7 @@ function buildDocItem(doc, worldName, worldEmoji) {
 // ── CLAUDE SESSION ──
 function openClaudeModal() {
   // Show user ID
-  const userId = state.user?.sub || state.user?.id || 'Sign in to see your ID';
+  const userId = state.user?.id || state.user?.sub || state.user?.email || 'Sign in to see your ID';
   const userIdBox = document.getElementById('userIdBox');
   userIdBox.textContent = userId;
   userIdBox.onclick = () => {
@@ -2253,7 +2255,7 @@ document.getElementById('claudeWorldSelect').addEventListener('change', (e) => {
   const loreDocs = (world.docs || []).filter(d => d.section === 'lore');
   const lines = [
     `# ${world.emoji || '🌍'} ${world.name}`,
-    `My WorldKeeper User ID: ${state.user?.sub || state.user?.id || 'unknown'}`,
+    `My WorldKeeper User ID: ${state.user?.id || state.user?.sub || state.user?.email || 'unknown'}`,
     ``,
     `## World Lore Docs (${loreDocs.length})`,
     ...loreDocs.map(d => `- ${d.title} [${d.type}] — ${d.url}`),
