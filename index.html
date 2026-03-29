@@ -599,6 +599,40 @@
 
     .doc-item:hover .doc-item-actions { opacity: 1; }
 
+    .send-claude-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      font-size: 10px;
+      font-weight: 500;
+      font-family: 'DM Sans', sans-serif;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(192,132,252,0.25);
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .send-claude-btn:hover {
+      background: rgba(192,132,252,0.22);
+      border-color: var(--accent);
+    }
+
+    .send-claude-btn.loading {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .send-claude-btn.done {
+      color: var(--green);
+      background: rgba(110,231,183,0.12);
+      border-color: rgba(110,231,183,0.3);
+    }
+
     .mini-btn {
       width: 24px;
       height: 24px;
@@ -2060,6 +2094,61 @@ document.getElementById('confirmDeleteWorldBtn').addEventListener('click', () =>
   toast('World deleted', '🗑️');
 });
 
+// ── SEND TO CLAUDE ──
+async function sendToClaudeDoc(doc, btn) {
+  btn.classList.add('loading');
+  btn.textContent = '⏳ fetching…';
+
+  try {
+    const match = doc.url?.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (!match) throw new Error('not a google doc url');
+    const docId = match[1];
+
+    const res = await fetch(`https://docs.google.com/document/d/${docId}/export?format=txt`);
+    if (!res.ok) throw new Error('private');
+    const text = await res.text();
+    if (!text || text.length < 10) throw new Error('empty');
+
+    const world = state.worlds.find(w =>
+      (w.docs || []).some(d => d.id === doc.id)
+    );
+    const couple = world && (world.couples || []).find(c => c.id === doc.coupleId);
+
+    const formatted = [
+      `# ${doc.title}`,
+      couple ? `**Couple:** ${couple.name}` : '',
+      world ? `**World:** ${world.emoji || ''} ${world.name}` : '',
+      `**Type:** ${doc.type}`,
+      `**Source:** ${doc.url}`,
+      ``,
+      `---`,
+      ``,
+      text.slice(0, 60000),
+      text.length > 60000 ? '\n\n[truncated — doc is very long]' : ''
+    ].filter(l => l !== undefined).join('\n');
+
+    await navigator.clipboard.writeText(formatted);
+
+    btn.classList.remove('loading');
+    btn.classList.add('done');
+    btn.innerHTML = '✓ copied!';
+    toast(`"${doc.title}" copied — paste into Claude 🤖`, '📋');
+
+    setTimeout(() => {
+      btn.classList.remove('done');
+      btn.innerHTML = '🤖 send';
+    }, 2500);
+  } catch (err) {
+    btn.classList.remove('loading');
+    btn.innerHTML = '🤖 send';
+    if (err.message === 'private') {
+      toast('Doc is private — set to "Anyone with link can view" in Google Docs', '🔒');
+    } else {
+      toast('Could not fetch doc: ' + err.message, '⚠️');
+    }
+  }
+}
+
 // ── DOC PREVIEW MODAL ──
 function openPreview(doc) {
   state.previewDoc = doc;
@@ -2118,11 +2207,13 @@ function buildDocItem(doc, worldName, worldEmoji) {
     </div>
     <div class="doc-type-badge ${typeClass(doc.type)}">${typeLabel(doc.type)}</div>
     <div class="doc-item-actions">
+      <button class="send-claude-btn" title="Copy doc text to paste into Claude">🤖 send</button>
       <button class="mini-btn preview-btn" title="Preview">👁</button>
       <button class="mini-btn open-btn" title="Open in Docs">↗</button>
       <button class="mini-btn del" title="Remove">✕</button>
     </div>
   `;
+  item.querySelector('.send-claude-btn').addEventListener('click', (e) => { e.stopPropagation(); sendToClaudeDoc(doc, e.currentTarget); });
   item.querySelector('.preview-btn').addEventListener('click', (e) => { e.stopPropagation(); openPreview(doc); });
   item.querySelector('.open-btn').addEventListener('click', (e) => { e.stopPropagation(); window.open(doc.url, '_blank'); });
   item.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); removeDoc(doc.id); });
