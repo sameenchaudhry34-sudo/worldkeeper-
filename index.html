@@ -1657,7 +1657,7 @@ function openWorld(worldId) {
   const world = state.worlds.find(w => w.id === worldId);
   if (!world) return;
   state.activeWorldId = worldId;
-  state.activeTab = 'lore';
+  state.activeTab = 'all';
 
   document.getElementById('wdEmoji').textContent = world.emoji || '🌍';
   document.getElementById('wdName').textContent = world.name;
@@ -1673,6 +1673,13 @@ function openWorld(worldId) {
 function renderWorldTabs(world) {
   const tabs = document.getElementById('worldTabs');
   tabs.innerHTML = '';
+
+  const allTab = document.createElement('button');
+  allTab.className = 'tab-btn' + (state.activeTab === 'all' ? ' active' : '');
+  allTab.textContent = '✦ All';
+  allTab.dataset.tab = 'all';
+  allTab.addEventListener('click', () => selectTab('all'));
+  tabs.appendChild(allTab);
 
   const loreTab = document.createElement('button');
   loreTab.className = 'tab-btn' + (state.activeTab === 'lore' ? ' active' : '');
@@ -1703,7 +1710,9 @@ function renderWorldDocs(world) {
   const list = document.getElementById('worldDocList');
   list.innerHTML = '';
   const docs = (world.docs || []).filter(d =>
-    state.activeTab === 'lore' ? d.section === 'lore' : d.coupleId === state.activeTab
+    state.activeTab === 'all' ? true :
+    state.activeTab === 'lore' ? d.section === 'lore' :
+    d.coupleId === state.activeTab
   );
   if (docs.length === 0) {
     list.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><p class="empty-title">No docs here yet</p><p class="empty-sub">Hit "Import from Drive" to add your Google Docs</p></div>`;
